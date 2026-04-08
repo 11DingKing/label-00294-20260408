@@ -133,7 +133,7 @@ import { getStatistics } from '@/api/orders'
 import { toast } from '@/utils/toast'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { BarChart, LineChart, PieChart } from 'echarts/charts'
+import { BarChart, LineChart, PieChart as EPieChart } from 'echarts/charts'
 import {
   TitleComponent,
   TooltipComponent,
@@ -152,7 +152,7 @@ use([
   CanvasRenderer,
   BarChart,
   LineChart,
-  PieChart,
+  EPieChart,
   TitleComponent,
   TooltipComponent,
   LegendComponent,
