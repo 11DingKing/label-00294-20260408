@@ -2,12 +2,14 @@
 订单模块视图
 """
 import logging
+from datetime import datetime, timedelta
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
-from django.db.models import Q
+from django.db.models import Q, Count, Sum
+from django.db.models.functions import TruncMonth
 from .models import Order, OrderItem
 from .serializers import (
     OrderSerializer,
@@ -262,3 +264,91 @@ class OrderViewSet(viewsets.ModelViewSet):
             'message': '订单项删除成功',
             'data': None
         }, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=['get'])
+    def statistics(self, request):
+        """
+        订单统计接口
+        支持按时间范围筛选：本周/本月/自定义区间
+        """
+        queryset = Order.objects.filter(user=request.user)
+        
+        time_range = request.query_params.get('time_range', 'all')
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        
+        today = datetime.now().date()
+        
+        if time_range == 'week':
+            start_date = today - timedelta(days=today.weekday())
+            end_date = today
+        elif time_range == 'month':
+            start_date = today.replace(day=1)
+            end_date = today
+        elif time_range == 'custom' and start_date and end_date:
+            try:
+                start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+                end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+            except ValueError:
+                return Response({
+                    'code': 400,
+                    'message': '日期格式错误，请使用 YYYY-MM-DD 格式',
+                    'data': None
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if start_date and end_date:
+            queryset = queryset.filter(created_at__date__gte=start_date, created_at__date__lte=end_date)
+        
+        status_stats = queryset.values('status').annotate(count=Count('id')).order_by('status')
+        status_map = {choice[0]: choice[1] for choice in Order.STATUS_CHOICES}
+        status_data = []
+        for stat in status_stats:
+            status_data.append({
+                'status': stat['status'],
+                'status_display': status_map.get(stat['status'], stat['status']),
+                'count': stat['count']
+            })
+        
+        monthly_trend = queryset.annotate(
+            month=TruncMonth('created_at')
+        ).values('month').annotate(
+            total_amount=Sum('total_amount'),
+            order_count=Count('id')
+        ).order_by('month')
+        
+        monthly_data = []
+        for item in monthly_trend:
+            monthly_data.append({
+                'month': item['month'].strftime('%Y-%m') if item['month'] else None,
+                'total_amount': float(item['total_amount']) if item['total_amount'] else 0,
+                'order_count': item['order_count']
+            })
+        
+        source_stats = queryset.values('status').annotate(count=Count('id')).order_by('-count')
+        source_data = []
+        total_orders = queryset.count()
+        for stat in source_stats:
+            percentage = round((stat['count'] / total_orders * 100), 1) if total_orders > 0 else 0
+            source_data.append({
+                'name': status_map.get(stat['status'], stat['status']),
+                'value': stat['count'],
+                'percentage': percentage
+            })
+        
+        summary = {
+            'total_orders': total_orders,
+            'total_amount': float(queryset.aggregate(Sum('total_amount'))['total_amount__sum'] or 0),
+            'pending_count': queryset.filter(status='pending').count(),
+            'completed_count': queryset.filter(status='delivered').count()
+        }
+        
+        return Response({
+            'code': 200,
+            'message': '获取成功',
+            'data': {
+                'summary': summary,
+                'status_stats': status_data,
+                'monthly_trend': monthly_data,
+                'source_distribution': source_data
+            }
+        })

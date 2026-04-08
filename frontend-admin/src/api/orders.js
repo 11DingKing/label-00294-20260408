@@ -35,3 +35,7 @@ export const addOrderItem = (orderId, data) => {
 export const deleteOrderItem = (orderId, itemId) => {
   return api.delete(`/orders/${orderId}/items/${itemId}/`)
 }
+
+export const getStatistics = (params) => {
+  return api.get('/orders/statistics/', { params })
+}
