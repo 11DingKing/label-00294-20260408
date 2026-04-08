@@ -370,14 +370,14 @@ const loadStatistics = async () => {
     
     const response = await getStatistics(params)
     
-    if (response.data.code === 200) {
-      const data = response.data.data
+    if (response.code === 200) {
+      const data = response.data
       statistics.summary = data.summary
       statistics.status_stats = data.status_stats
       statistics.monthly_trend = data.monthly_trend
       statistics.source_distribution = data.source_distribution
     } else {
-      toast.error(response.data.message || '获取统计数据失败')
+      toast.error(response.message || '获取统计数据失败')
     }
   } catch (error) {
     toast.error('获取统计数据失败')
